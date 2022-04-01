@@ -1,74 +1,86 @@
-/*********************************************************************
- This is an example for our nRF52 based Bluefruit LE modules
-
- Pick one up today in the adafruit shop!
-
- Adafruit invests time and resources providing this open source code,
- please support Adafruit and open-source hardware by purchasing
- products from Adafruit!
-
- MIT license, check LICENSE for more information
- All text above, and the splash screen below must be included in
- any redistribution
-*********************************************************************/
 #include <bluefruit.h>
 #include "NRF52TimerInterrupt.h"
+#include "Button.h"
 
-//////////// Button Handlers ///////////
+/* BLE */
+BLEDis bledis;
+BLEHidAdafruit blehid;
+
+/* Button Handlers */
+// Pins
 #define TOP_BUTTON D0
 #define SECOND_BUTTON D1
 #define THIRD_BUTTON D2
 #define BOTTOM_BUTTON D3
 
+#define BUTTON_COUNT 4
+Button buttonArray[BUTTON_COUNT] = {
+  Button(TOP_BUTTON, 
+    []() -> void {
+      uint8_t keys[6] = {HID_KEY_ARROW_UP,0,0,0,0,0};
+      blehid.keyboardReport(BLE_CONN_HANDLE_INVALID, 0, keys);
+      blehid.keyRelease();
+    }, 
+    []() -> void {
+      uint8_t keys[6] = {HID_KEY_ARROW_RIGHT,0,0,0,0,0};
+      blehid.keyboardReport(BLE_CONN_HANDLE_INVALID, 0, keys);
+      blehid.keyRelease();
+    }), 
+  Button(SECOND_BUTTON,     
+    []() -> void {
+      uint8_t keys[6] = {HID_KEY_SPACE,0,0,0,0,0};
+      blehid.keyboardReport(BLE_CONN_HANDLE_INVALID, 0, keys);
+      blehid.keyRelease();
+    }, 
+    []() -> void {
+      uint8_t keys[6] = {HID_KEY_TAB,0,0,0,0,0};
+      blehid.keyboardReport(BLE_CONN_HANDLE_INVALID, KEYBOARD_MODIFIER_LEFTGUI, keys);
+      blehid.keyRelease();
+    }), 
+  Button(THIRD_BUTTON,
+    []() -> void {
+      uint8_t keys[6] = {HID_KEY_Z,0,0,0,0,0};
+      blehid.keyboardReport(BLE_CONN_HANDLE_INVALID, KEYBOARD_MODIFIER_LEFTGUI, keys);
+      blehid.keyRelease();
+    }, 
+    []() -> void {
+      uint8_t keys[6] = {HID_KEY_Z,0,0,0,0,0};
+      blehid.keyboardReport(BLE_CONN_HANDLE_INVALID, KEYBOARD_MODIFIER_LEFTSHIFT | KEYBOARD_MODIFIER_LEFTGUI, keys);
+      blehid.keyRelease();
+    }), 
+  Button(BOTTOM_BUTTON,     
+    []() -> void {
+      uint8_t keys[6] = {HID_KEY_ARROW_DOWN,0,0,0,0,0};
+      blehid.keyboardReport(BLE_CONN_HANDLE_INVALID, 0, keys);
+      blehid.keyRelease();
+    }, 
+    []() -> void {
+      uint8_t keys[6] = {HID_KEY_ARROW_LEFT,0,0,0,0,0};
+      blehid.keyboardReport(BLE_CONN_HANDLE_INVALID, 0, keys);
+      blehid.keyRelease();
+    })
+};
+
+/* Timer Setup */
 #define TIMER1_INTERVAL_MS         10
+NRF52Timer ButtonTimer(NRF_TIMER_2);
+
+void TimerHandler() {
+    for (int i = 0; i < BUTTON_COUNT; i++) {
+      buttonArray[i].updateState();
+    }
+}
+
+/* Battery Service */
 #define BATTERY_UPDATE_INTERVAL_MS 10000 // 10 Seconds
-
-
 #define VREF 3.3 // Assumes 3.3V regulator output is ADC reference voltage
 #define ADC_LIMIT 1024 // 10-bit ADC readings 0-1023, so the factor is 1024
 #define VMAX 3.7 // Max Voltage 
 #define VMIN 3.2 // Off Voltage
 #define BATTERY_STATUS_WIDTH (VMAX - VMIN)
 
-enum ButtonState {
-  PRESSED,
-  RELEASED, 
-  STABLE
-};
+unsigned long lastUpdate;
 
-// Init NRF52 timers NRF_TIMER2 and 3
-NRF52Timer ButtonTimer(NRF_TIMER_2);
-//NRF52Timer BatteryTimer(NRF_TIMER_4);
-
-bool lastState[4];
-
-ButtonState deBounceButton(int whichButton) {
-  bool pressed = digitalRead(whichButton);
-  if (pressed == lastState[(whichButton)]) {
-    return STABLE;
-  }
-  lastState[(whichButton)] = pressed;
-  return pressed ? PRESSED : RELEASED;
-}
-
-ButtonState buttonStates[4] = {STABLE, STABLE, STABLE, STABLE};
-
-void ButtonInterruptHandler() {
-    buttonStates[(TOP_BUTTON)] = deBounceButton(TOP_BUTTON);
-    buttonStates[(SECOND_BUTTON)] = deBounceButton(SECOND_BUTTON); 
-    buttonStates[(THIRD_BUTTON)] = deBounceButton(THIRD_BUTTON);
-    buttonStates[(BOTTOM_BUTTON)] = deBounceButton(BOTTOM_BUTTON);
-}
-
-String keyCode[4] = {"p", "u", "o", "d"}; 
-
-bool sentKey;
-
-
-///////////////// BLE /////////////////
-
-BLEDis bledis;
-BLEHidAdafruit blehid;
 BLEBas blebas;
 
 void updateBatteryStatus() {
@@ -81,34 +93,21 @@ void updateBatteryStatus() {
 }
 
 
-unsigned long lastUpdate;
 
 void setup() 
 {
   Serial.begin(115200);
 
   // Button Handlers
-  pinMode(TOP_BUTTON, INPUT_PULLDOWN);
-  pinMode(SECOND_BUTTON, INPUT_PULLDOWN);
-  pinMode(THIRD_BUTTON, INPUT_PULLDOWN);
-  pinMode(BOTTOM_BUTTON, INPUT_PULLDOWN);
+  for (int i = 0; i < BUTTON_COUNT; i++) {
+    buttonArray[i].begin();
+  }
 
   // Battery Read Enable
   pinMode(VBAT_ENABLE, OUTPUT);
   digitalWrite(VBAT_ENABLE,LOW);
 
   // BLE
-  Serial.println("Bluefruit52 HID Keyboard Example");
-  Serial.println("--------------------------------\n");
-
-  Serial.println();
-  Serial.println("Go to your phone's Bluetooth settings to pair your device");
-  Serial.println("then open an application that accepts keyboard input");
-
-  Serial.println();
-  Serial.println("Enter the character(s) to send:");
-  Serial.println();  
-
   Bluefruit.begin();
   Bluefruit.setTxPower(4);    // Check bluefruit.h for supported values
 
@@ -117,38 +116,21 @@ void setup()
   bledis.setModel("MFI Switch Mk III");
   bledis.begin();
 
+  // Start Battery Service
   blebas.begin();
 
-  /* Start BLE HID
-   * Note: Apple requires BLE device must have min connection interval >= 20m
-   * ( The smaller the connection interval the faster we could send data).
-   * However for HID and MIDI device, Apple could accept min connection interval 
-   * up to 11.25 ms. Therefore BLEHidAdafruit::begin() will try to set the min and max
-   * connection interval to 11.25  ms and 15 ms respectively for best performance.
-   */
+  // Start BLE HID
   blehid.begin();
-
-  /* Set connection interval (min, max) to your perferred value.
-   * Note: It is already set by BLEHidAdafruit::begin() to 11.25ms - 15ms
-   * min = 9*1.25=11.25 ms, max = 12*1.25= 15 ms 
-   */
-  /* Bluefruit.Periph.setConnInterval(9, 12); */
 
   // Set up and start advertising
   startAdv();
 
   // Start the Timer
   // Interval in microsecs
-  if (ButtonTimer.attachInterruptInterval(TIMER1_INTERVAL_MS * 1000, ButtonInterruptHandler)) {
-    Serial.print(F("Starting ButtonTimer OK, millis() = ")); Serial.println(millis());
+  if (ButtonTimer.attachInterruptInterval(TIMER1_INTERVAL_MS * 1000, TimerHandler)) {
+    Serial.print(F("Starting ButtonTimer OK")); 
   } else
     Serial.println(F("Can't set ButtonTimer. Select another freq. or timer"));
-
-    // Interval in microsecs
-//  if (BatteryTimer.attachInterruptInterval(TIMER2_INTERVAL_MS * 1000, BatteryInterruptHandler)) {
-//    Serial.print(F("Starting BatteryTimer OK, millis() = ")); Serial.println(millis());
-//  } else
-//    Serial.println(F("Can't set BatteryTimer. Select another freq. or timer"));
 
   lastUpdate = millis();
 }
@@ -182,53 +164,15 @@ void startAdv(void)
   Bluefruit.Advertising.start(0);                // 0 = Don't stop advertising after n seconds
 }
 
-void checkButton(int whichButton) {
-  ButtonState currentState = buttonStates[(whichButton)];
-  buttonStates[(whichButton)] = STABLE;
 
-  if (currentState == PRESSED) {
-    sentKey = true;
-    String strToSend = keyCode[(whichButton)];
-    int numToSend = strToSend.length() + 1;
-    char buff[numToSend];
-    strToSend.toCharArray(buff, numToSend);
-    blehid.keySequence(buff, numToSend);
-  
-    if (Serial.available()) {
-      Serial.print(strToSend);
-      Serial.print(" ");
-    }
+
+void loop() {
+  for (int i = 0; i < BUTTON_COUNT; i++) {
+    buttonArray[i].sendKeys();
   }
-}
-
-void loop() 
-{
-  // Only send KeyRelease if previously pressed to avoid sending
-  // multiple keyRelease reports (that consume memory and bandwidth)
-//  if ( sentKey )
-//  {
-//    sentKey = false;
-//    blehid.keyRelease();
-//    
-//    // Delay a bit after a report
-//    delay(5);
-//  }
-
-  checkButton(TOP_BUTTON);
-  checkButton(SECOND_BUTTON);
-  checkButton(THIRD_BUTTON);
-  checkButton(BOTTOM_BUTTON);
 
   if ((millis() - lastUpdate) >= BATTERY_UPDATE_INTERVAL_MS) {
     updateBatteryStatus();
     lastUpdate = millis();
   }
-
-
-//  if (sentKey) { 
-//    Serial.println("");
-//
-//    // Delay a bit after a report
-//    delay(5);
-//  }
 }
