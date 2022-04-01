@@ -21,7 +21,7 @@
 #define BOTTOM_BUTTON D3
 
 #define TIMER1_INTERVAL_MS         10
-#define BATTERY_UPDATE_INTERVAL_MS 1000 // 10 Seconds
+#define BATTERY_UPDATE_INTERVAL_MS 10000 // 10 Seconds
 
 
 #define VREF 3.3 // Assumes 3.3V regulator output is ADC reference voltage
@@ -76,7 +76,7 @@ void updateBatteryStatus() {
   double adcVoltage = (adcCount * VREF) / ADC_LIMIT;
   double vBat = adcVoltage*1510.0/(510.0); //true battery voltage 
   uint8_t batteryPercent = (min(vBat, VMAX) - VMIN) / BATTERY_STATUS_WIDTH * 100;
-    Serial.print(vBat);  Serial.print(" : "); Serial.println(batteryPercent);
+  Serial.print(vBat);  Serial.print(" : "); Serial.println(batteryPercent);
   blebas.notify(batteryPercent);
 }
 
@@ -86,7 +86,6 @@ unsigned long lastUpdate;
 void setup() 
 {
   Serial.begin(115200);
-  while ( !Serial ) delay(10);   // for nrf52840 with native usb
 
   // Button Handlers
   pinMode(TOP_BUTTON, INPUT_PULLDOWN);
